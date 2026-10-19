@@ -1,3 +1,4 @@
+import cors from 'cors';
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
@@ -25,6 +26,7 @@ export interface ServerOptions {
 
 export function buildServer(opts: ServerOptions = {}) {
   const app = express();
+  app.use(cors({ origin: config.corsOrigin === '*' ? true : config.corsOrigin }));
   app.use(express.json());
 
   const rules = opts.rules ?? DEFAULT_RULES;
