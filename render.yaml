@@ -1,0 +1,23 @@
+# Render Blueprint for the Ludo backend (Node.js + Express + Socket.io).
+# Deploy via: Render Dashboard → New → Blueprint → point at the repo containing this file,
+# or: render.yaml in repo root picked up automatically.
+# Required env vars (set in Render dashboard, never commit secrets):
+#   MONGODB_URI  – full Atlas connection string (with password + db name)
+#   ADMIN_TOKEN  – secret token for /api/admin/* (generate a long random string)
+services:
+  - type: web
+    name: ludo-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: PORT
+        value: 3000
+      - key: MONGODB_URI
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
