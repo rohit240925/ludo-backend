@@ -14,6 +14,7 @@ import { economyRouter } from './routes/economy.js';
 import { leaderboardRouter } from './routes/leaderboard.js';
 import { rewardsRouter } from './routes/rewards.js';
 import { createAdminRouter } from './routes/admin.js';
+import { MatchmakingQueue } from './matchmaking.js';
 import { walletPort } from './economy/wallet.js';
 
 export interface ServerOptions {
@@ -31,11 +32,32 @@ export function buildServer(opts: ServerOptions = {}) {
 
   const rules = opts.rules ?? DEFAULT_RULES;
   const rooms = new RoomManager(opts.diceFactory, walletPort, rules);
+  const matchmaking = new MatchmakingQueue(rooms);
 
   app.use(economyRouter);
   app.use(leaderboardRouter);
   app.use(rewardsRouter);
   app.use('/api/admin', createAdminRouter(rooms));
+
+  // -- matchmaking ------------------------------------------------------------
+  app.post('/api/matchmaking/join', (req, res) => {
+    const { userId, playerName } = req.body ?? {};
+    if (!userId || typeof userId !== 'string') {
+      res.status(400).json({ code: 'USER_ID_REQUIRED' });
+      return;
+    }
+    res.json(
+      matchmaking.join(userId, typeof playerName === 'string' ? playerName : 'Player'),
+    );
+  });
+  app.get('/api/matchmaking/status/:userId', (req, res) => {
+    res.json(matchmaking.status(req.params.userId));
+  });
+  app.post('/api/matchmaking/leave', (req, res) => {
+    const { userId } = req.body ?? {};
+    if (typeof userId === 'string') matchmaking.leave(userId);
+    res.json({ ok: true });
+  });
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -89,7 +111,7 @@ export function buildServer(opts: ServerOptions = {}) {
   };
 
   attachSocket(io, rooms, persist);
-  return { app, httpServer, io, rooms };
+  return { app, httpServer, io, rooms, matchmaking };
 }
 
 export async function startServer(opts: ServerOptions = {}) {

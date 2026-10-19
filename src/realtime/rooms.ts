@@ -198,6 +198,17 @@ export class RoomManager {
       if (userId !== undefined) existing.userId = userId;
       return room; // idempotent
     }
+    // Matchmaking: a seat may have been pre-created with a placeholder id but
+    // the real userId. Claim it instead of adding a duplicate seat.
+    if (userId) {
+      const reserved = room.players.find((p) => p.userId === userId);
+      if (reserved) {
+        reserved.id = playerId;
+        reserved.name = playerName.slice(0, 24) || reserved.name;
+        reserved.connected = true;
+        return room;
+      }
+    }
     room.players.push({
       id: playerId,
       name: playerName.slice(0, 24) || `Player ${room.players.length + 1}`,
