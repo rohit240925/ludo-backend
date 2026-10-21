@@ -36,6 +36,9 @@ export function attachSocket(io: Server, rooms: RoomManager, persist: PersistGam
   /** room.code -> pending turn-timeout handle. Lives here (not on Room) so RoomManager stays timer-free. */
   const timers = new Map<string, NodeJS.Timeout>();
 
+  /** Rooms whose matchmaking auto-start is currently in flight (double-join guard). */
+  const autoStarting = new Set<string>();
+
   function emitError(socket: Socket, code: string, message?: string): void {
     socket.emit('error', { code, message: message ?? code });
   }
@@ -330,7 +333,7 @@ export function attachSocket(io: Server, rooms: RoomManager, persist: PersistGam
       }
     });
 
-    socket.on('join_room', (data: RoomRef) => {
+    socket.on('join_room', async (data: RoomRef) => {
       try {
         const room = rooms.joinRoom(
           data?.code ?? '',
@@ -340,11 +343,37 @@ export function attachSocket(io: Server, rooms: RoomManager, persist: PersistGam
         );
         socket.join(room.code);
         track(socket.id, room.code);
-        socket.emit('room_joined', { code: room.code, state: stateOf(room) });
+        const seat = room.players.findIndex((p) => p.id === socket.id);
+        socket.emit('room_joined', { code: room.code, seat, state: stateOf(room) });
         socket.to(room.code).emit('player_joined', {
           name: room.players[room.players.length - 1].name,
           state: stateOf(room),
         });
+        // Matchmaking rooms have no human host to press Start: once every
+        // expected seat is filled and connected, start the game for them.
+        if (
+          room.expectedPlayers !== undefined &&
+          room.status === 'waiting' &&
+          !autoStarting.has(room.code) &&
+          room.players.length >= room.expectedPlayers &&
+          room.players.every((p) => p.connected)
+        ) {
+          autoStarting.add(room.code);
+          try {
+            await rooms.startGame(room.code, room.players[0].id);
+            io.to(room.code).emit('game_started', { state: stateOf(room) });
+            beginTurn(room); // arms the first roll clock + emits timer_started
+          } catch (e) {
+            // e.g. WALLET_REQUIRED / INSUFFICIENT_COINS / DB_REQUIRED for
+            // entry-fee rooms — surface it so clients don't sit in limbo.
+            io.to(room.code).emit('error', {
+              code: (e as Error).message,
+              message: (e as Error).message,
+            });
+          } finally {
+            autoStarting.delete(room.code);
+          }
+        }
       } catch (e) {
         emitError(socket, (e as Error).message);
       }

@@ -43,6 +43,12 @@ export interface Room {
   winner: number | null;
   /** Coins each player pays to join the game. 0 = free. */
   entryFee: number;
+  /**
+   * Matchmaking rooms only: the seat count the room was created for. The
+   * socket layer auto-starts the game once this many seats are filled and
+   * every seat is connected. Undefined for friend/host rooms (manual start).
+   */
+  expectedPlayers?: number;
   // --- server-authoritative turn clock (see docs/ARCHITECTURE.md) ---
   /** Current phase being timed, or null when no clock is running. */
   phase: TurnPhase | null;
@@ -101,6 +107,8 @@ export function publicState(room: Room): RoomState {
 export interface CreateRoomOptions {
   userId?: string;
   entryFee?: number;
+  /** Matchmaking only: auto-start the game when this many seats are filled. */
+  expectedPlayers?: number;
 }
 
 /**
@@ -152,6 +160,13 @@ export class RoomManager {
     if (!Number.isInteger(entryFee) || entryFee < 0) {
       throw new Error('INVALID_ENTRY_FEE');
     }
+    const expectedPlayers = opts?.expectedPlayers;
+    if (
+      expectedPlayers !== undefined &&
+      (!Number.isInteger(expectedPlayers) || expectedPlayers < 2 || expectedPlayers > 4)
+    ) {
+      throw new Error('INVALID_PLAYER_COUNT');
+    }
     const code = this.newCode();
     const room: Room = {
       code,
@@ -171,6 +186,7 @@ export class RoomManager {
       moves: [],
       winner: null,
       entryFee,
+      expectedPlayers,
       phase: null,
       deadlineAt: null,
       turnNonce: 0,

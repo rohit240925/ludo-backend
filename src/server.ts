@@ -41,13 +41,24 @@ export function buildServer(opts: ServerOptions = {}) {
 
   // -- matchmaking ------------------------------------------------------------
   app.post('/api/matchmaking/join', (req, res) => {
-    const { userId, playerName } = req.body ?? {};
+    const { userId, playerName, playerCount, entryFee } = req.body ?? {};
     if (!userId || typeof userId !== 'string') {
       res.status(400).json({ code: 'USER_ID_REQUIRED' });
       return;
     }
+    if (playerCount !== undefined && playerCount !== 2 && playerCount !== 4) {
+      res.status(400).json({ code: 'INVALID_PLAYER_COUNT' });
+      return;
+    }
+    if (entryFee !== undefined && (!Number.isInteger(entryFee) || entryFee < 0)) {
+      res.status(400).json({ code: 'INVALID_ENTRY_FEE' });
+      return;
+    }
     res.json(
-      matchmaking.join(userId, typeof playerName === 'string' ? playerName : 'Player'),
+      matchmaking.join(userId, typeof playerName === 'string' ? playerName : 'Player', {
+        playerCount,
+        entryFee,
+      }),
     );
   });
   app.get('/api/matchmaking/status/:userId', (req, res) => {
